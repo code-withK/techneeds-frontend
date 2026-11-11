@@ -59,79 +59,56 @@ export function buildProfile(d,id){ // rule-based fallback; backend/LLM version 
   skills:[{k:'Videos',v:v.pct},{k:'Quizzes',v:q.avg||q.pct},{k:'Projects',v:p.pct},{k:'Punctual',v:ss.length?Math.round(early/ss.length*100):0},{k:'Rank',v:rank?Math.max(10,100-(rank-1)*15):0}]}}
 
 export const api={
- login: (role, id, password) => {
-  if (role === 'admin') {
-    if (!MOCK) {
-      throw new Error(
-        'Admin login is currently demo-only. Enable mock mode to use it.'
-      );
-    }
+ 
+const BASE = 'https://tn-backend-1.onrender.com';
 
-    return call(
-      async () => {},
-      () => {
-        const u = db().users.find(
-          u =>
-            u.role === 'admin' &&
-            u.login.toLowerCase() === id.trim().toLowerCase() &&
-            u.pw === password
-        );
+export const api = {
+  async login(role, id, password) {
+    if (role === 'mentor') {
+      const res = await fetch(`${BASE}/api/mentors/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: id, password })
+      });
 
-        if (!u) throw new Error('Invalid credentials');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Mentor login failed');
 
-        return {
-          token: 'mock.' + u.id,
-          user: strip(u)
-        };
-      }
-    );
-  }
-
-  return call(
-    async () => {
-      const endpoint =
-        role === 'mentor'
-          ? '/api/mentors/login'
-          : '/api/m/login';
-
-      const payload =
-        role === 'mentor'
-          ? { email: id.trim(), password }
-          : { enrollmentNumber: id.trim(), password };
-
-      const data = await http(endpoint, 'POST', payload);
-
-      const account = data.mentor || data.mentee;
-
-      if (!account || !data.token) {
-        throw new Error('Unexpected login response from backend');
-      }
-
-      const { _id, password: hiddenPassword, ...safeAccount } = account;
       return {
         token: data.token,
         user: {
-          ...safeAccount,
-          id: _id,
-          role
+          ...data.mentor,
+          role: 'mentor'
         }
       };
-    },
-    () => {
-      const u = db().users.find(
-        u =>
-          u.role === role &&
-          u.login.toLowerCase() === id.trim().toLowerCase() &&
-          u.pw === password
-      );
+    }
 
-      if (!u) throw new Error('Invalid credentials');
+    if (role === 'mentee') {
+      const res = await fetch(`${BASE}/api/m/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enrollmentNumber: id,
+          password
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Mentee login failed');
 
       return {
-        token: 'mock.' + u.id,
-        user: strip(u)
+        token: data.token,
+        user: {
+          role: 'mentee',
+          enrollmentNumber: id
+        }
       };
     }
+
+    throw new Error('Admin login is not connected yet');
+  }
+};
+
   );
 },
  programs:()=>call(()=>http(EP.programs),()=>db().programs),
