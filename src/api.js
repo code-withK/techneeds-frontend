@@ -107,11 +107,12 @@ export const api={
         throw new Error('Unexpected login response from backend');
       }
 
+      const { _id, password: hiddenPassword, ...safeAccount } = account;
       return {
         token: data.token,
         user: {
-          ...account,
-          id: account._id,
+          ...safeAccount,
+          id: _id,
           role
         }
       };
