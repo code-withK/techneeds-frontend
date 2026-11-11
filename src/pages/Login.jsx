@@ -7,5 +7,8 @@ export default function Login(){const [role,setRole]=useState('mentee'),[id,setI
  <input className="x-in" placeholder={role==='mentee'?'Enrollment Number':'Email'} value={id} onChange={e=>setId(e.target.value)} required/>
  <input className="x-in" type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} required/>
  {err&&<p className="x-err">{err}</p>}<button className="x-btn pri" disabled={busy}>{busy?'Signing in…':'Sign in'}</button>
- <small className="muted">Demo (offline mode): admin@techneeds.in / admin123 · mentor@techneeds.in / mentor123 · TN2026001 / tn@1234</small>
+ <small className="muted">
+  Demo credentials work only in offline mock mode.
+  Real mentor and mentee accounts require backend credentials.
+</small>
  <Link to="/" className="muted">← Back to home</Link></form></div>}
