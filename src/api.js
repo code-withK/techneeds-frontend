@@ -1,10 +1,32 @@
 // All backend calls live here. If the backend is unreachable, a localStorage mock DB takes over so the demo always works.
-const BASE=import.meta.env.VITE_API_URL||'http://localhost:8000';
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const MOCK=import.meta.env.VITE_MOCK==='1';
 // ⚠ Adjust these paths/payloads to match backend routes in Agarwalvidu/tn_web
 export const EP={login:'/api/auth/login',programs:'/api/programs',mentors:'/api/mentors',mentees:'/api/mentees',resources:'/api/resources',submissions:'/api/submissions',grade:'/api/submissions/grade',leaderboard:'/api/leaderboard',aiProfile:'/api/profile/ai'};
 export const state={mode:'live'};
-async function http(p,m='GET',b){const t=localStorage.getItem('tn_token');const r=await fetch(BASE+p,{method:m,headers:{'Content-Type':'application/json',...(t?{Authorization:`Bearer ${t}`}:{})},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.message||r.statusText),{http:1});return j}
+async function http(p, m = 'GET', b) {
+  const t = localStorage.getItem('tn_token');
+
+  const r = await fetch(BASE + p, {
+    method: m,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(t ? { 'x-auth-token': t } : {})
+    },
+    body: b ? JSON.stringify(b) : undefined
+  });
+
+  const j = await r.json().catch(() => ({}));
+
+  if (!r.ok) {
+    throw Object.assign(
+      new Error(j.message || j.msg || r.statusText),
+      { http: 1 }
+    );
+  }
+
+  return j;
+}
 async function call(live,mock){if(MOCK){state.mode='mock';return mock()}try{const r=await live();state.mode='live';return r}catch(e){if(e.http)throw e;state.mode='mock';return mock()}}
 
 const D=864e5,KEY='tn_db',uid=()=>Math.random().toString(36).slice(2,8),gpw=()=>Math.random().toString(36).slice(2,10);
@@ -37,7 +59,80 @@ export function buildProfile(d,id){ // rule-based fallback; backend/LLM version 
   skills:[{k:'Videos',v:v.pct},{k:'Quizzes',v:q.avg||q.pct},{k:'Projects',v:p.pct},{k:'Punctual',v:ss.length?Math.round(early/ss.length*100):0},{k:'Rank',v:rank?Math.max(10,100-(rank-1)*15):0}]}}
 
 export const api={
- login:(role,id,password)=>call(()=>http(EP.login,'POST',{role,id,password}),()=>{const u=db().users.find(u=>u.role===role&&u.login.toLowerCase()===id.trim().toLowerCase()&&u.pw===password);if(!u)throw new Error('Invalid credentials');return{token:'mock.'+u.id,user:strip(u)}}),
+ login: (role, id, password) => {
+  if (role === 'admin') {
+    if (!MOCK) {
+      throw new Error(
+        'Admin login is currently demo-only. Enable mock mode to use it.'
+      );
+    }
+
+    return call(
+      async () => {},
+      () => {
+        const u = db().users.find(
+          u =>
+            u.role === 'admin' &&
+            u.login.toLowerCase() === id.trim().toLowerCase() &&
+            u.pw === password
+        );
+
+        if (!u) throw new Error('Invalid credentials');
+
+        return {
+          token: 'mock.' + u.id,
+          user: strip(u)
+        };
+      }
+    );
+  }
+
+  return call(
+    async () => {
+      const endpoint =
+        role === 'mentor'
+          ? '/api/mentors/login'
+          : '/api/m/login';
+
+      const payload =
+        role === 'mentor'
+          ? { email: id.trim(), password }
+          : { enrollmentNumber: id.trim(), password };
+
+      const data = await http(endpoint, 'POST', payload);
+
+      const account = data.mentor || data.mentee;
+
+      if (!account || !data.token) {
+        throw new Error('Unexpected login response from backend');
+      }
+
+      return {
+        token: data.token,
+        user: {
+          ...account,
+          id: account._id,
+          role
+        }
+      };
+    },
+    () => {
+      const u = db().users.find(
+        u =>
+          u.role === role &&
+          u.login.toLowerCase() === id.trim().toLowerCase() &&
+          u.pw === password
+      );
+
+      if (!u) throw new Error('Invalid credentials');
+
+      return {
+        token: 'mock.' + u.id,
+        user: strip(u)
+      };
+    }
+  );
+},
  programs:()=>call(()=>http(EP.programs),()=>db().programs),
  addProgram:p=>call(()=>http(EP.programs,'POST',p),()=>{const d=db(),x={id:uid(),...p};d.programs.push(x);save(d);return x}),
  mentors:()=>call(()=>http(EP.mentors),()=>db().users.filter(u=>u.role==='mentor').map(strip)),
